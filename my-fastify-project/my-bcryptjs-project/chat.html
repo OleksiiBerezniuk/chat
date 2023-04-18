@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Messages App</title>
+  </head>
+  <body>
+    <h2>Login</h2>
+    <form id="login-form">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" />
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" />
+      <button type="submit">Submit</button>
+    </form>
+
+    <script>
+        const loginForm = document.querySelector('#login-form');
+const usernameInput = document.querySelector('#username');
+const passwordInput = document.querySelector('#password');
+
+
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  try {
+    const response = await fetch('http://localhost:3001/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username: usernameInput.value,
+        password: passwordInput.value
+      })
+    });
+    const data = await response.json();
+    localStorage.setItem('token', data.token);
+    messagesList.innerHTML = '';
+    loadMessages();
+  } catch (error) {
+    console.error(error);
+    alert('Помилка при авторизації');
+  }
+});
+
+    </script>
+
+
+
+    <h2>Create Message</h2>
+    <form id="create-message-form">
+      <label for="content">Content:</label>
+      <textarea id="content" name="content"></textarea>
+      <button type="submit">Submit</button>
+    </form>
+
+    <h2>Create File Message</h2>
+    <form id="create-file-message-form">
+      <label for="filename">Filename:</label>
+      <input type="text" id="filename" name="filename" />
+      <label for="file">File:</label>
+      <input type="file" id="file" name="file" />
+      <button type="submit">Submit</button>
+    </form>
+
+    <h2>Messages List</h2>
+    <div id="messages-list"></div>
+
+    <script>
+        const form = document.querySelector('#create-message-form');
+        const textInput = document.querySelector('#content');
+        const fileInput = document.querySelector('#file');
+        const messagesList = document.querySelector('#messages-list');
+            
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+        
+          if (!textInput.value && !fileInput.files[0]) {
+            alert('Введіть текст або завантажте файл');
+            return;
+          }
+        
+          if (fileInput.files[0] && fileInput.files[0].size > 5 * 1024 * 1024) {
+            alert('Файл повинен бути менше 5 МБ');
+            return;
+          }
+        
+          try {
+            let messageData;
+            if (fileInput.files[0]) {
+              const formData = new FormData();
+              formData.append('file', fileInput.files[0]);
+              formData.append('filename', fileInput.files[0].name);
+              const response = await fetch('http://localhost:3001/message/create/file', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: formData
+              });
+              messageData = await response.json();
+            } else {
+              const response = await fetch('http://localhost:3001/message/create/text', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  content: textInput.value
+                })
+              });
+              messageData = await response.json();
+            }
+            const messageHtml = `<li><a href="http://localhost:3001/message/content?message_id=${messageData.id}">${messageData.content}</a></li>`;
+            messagesList.insertAdjacentHTML('afterbegin', messageHtml);
+            textInput.value = '';
+            fileInput.value = '';
+          } catch (error) {
+            console.error(error);
+            alert('Помилка при створенні повідомлення');
+          }
+        });
+        
+        async function loadMessages(page = 1, limit = 10) {
+          const response = await fetch(`http://localhost:3001/message/list?page=${page}&limit=${limit}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          const messagesData = await response.json();
+          const messagesHtml = messagesData.map(message => `<li><a href="/message/content?message_id=${message.id}">${message.content}</a></li>`).join('');
+          messagesList.innerHTML = messagesHtml;
+        }
+        
+        loadMessages();
+    </script>
+  </body>
+</html>
