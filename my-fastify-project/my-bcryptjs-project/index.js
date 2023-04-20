@@ -1,8 +1,19 @@
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-const fastify = require('fastify')();
+const fastify = require('fastify')({ 
+  logger: true, 
+  multipart: true 
+});;
 const multer = require('multer');
 const path = require('path');
+
+fastify.register(require('fastify-multipart'), {
+  addToBody: true, // Додає об'єкт request.body з розпарсеними даними multipart форми до контексту запиту
+  sharedSchemaId: '#file', // Встановлює загальну схему валідації для файлів
+  limits: {
+    fileSize: 1000000, // Обмеження розміру файлу
+  },
+});
 
 
 fastify.listen({
@@ -47,7 +58,7 @@ fastify.post('/account/register', async (request, reply) => {
   console.log(request);
  
   try {
-    // проверка имени пользователя
+    // Перевірка ім'я користувача
     const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     if (result.rows.length > 0) {
       throw new Error('Ти шаблонний шкіряний чохол, давай другий нік, бо дівки тобі не дадуть');
@@ -84,24 +95,31 @@ fastify.post('/message/create/text', { preValidation: [authenticate] }, async (r
   }
 });
 
-// Создание файлового сообщения
+// Створення файлового повідомлення
 const fileSchema = {
   type: 'object',
+  required: ['file'],
   properties: {
-    filename: { type: 'string' },
-    file: { type: 'object' }
+    file: {
+      type: 'object',
+      properties: {
+        fieldname: { type: 'string' },
+        buffer: { type: 'string', format: 'binary' },
+        mimetype: { type: 'string' },
+        filename: { type: 'string' },
+      },
+    },
   },
-  required: ['filename', 'file']
 };
-fastify.post('/message/create/file', { preValidation: [authenticate], schema: { body: fileSchema } }, async (request, reply) => {
+fastify.post('/message/create/file', { preValidation: [authenticate], schema: { body: fileSchema, multipart: true } }, async (request, reply) => {
   const { filename, file } = request.body;
   const { id: authorId } = request.user;
 
   try {
-    // Сохранение файла на диск
+    // Збереження файлу на диск
     const filePath = `./uploads/${filename}`;
     await file.toFile(filePath);
-    // Сохранение записи о файле в базе данных
+    // збереження запису про файл 
     const result = await pool.query('INSERT INTO messages (type, filename, author_id) VALUES ($1, $2, $3) RETURNING *', ['file', filename, authorId]);
     const message = result.rows[0];
     reply.send(message);
